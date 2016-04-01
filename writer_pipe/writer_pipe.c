@@ -60,10 +60,21 @@ int main(int argc, char** argv)
 		ERROR("Error, opened file is not a pipe");
 	}
 
+	//TODO: is this line size ok?
+	char line[1024];
+	while (fgets(line, sizeof(line), stdin) != NULL)
+	{
+		int len = strlen(line);
+		if (write(fd, line, len) != len) {
+			ERROR("Error, write failed");
+		}
+	}
+
 	exit_status = EXIT_SUCCESS;
 
 end:
 	if (fd != -1) {
+		unlink(pipe_path);
 		close(fd);
 	}
 
