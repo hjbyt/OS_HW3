@@ -27,6 +27,7 @@ typedef int bool;
 //
 
 int open_fifo(const char* file_path);
+bool read_file(int fd);
 
 //
 // Implementation
@@ -51,24 +52,8 @@ int main(int argc, char** argv)
 			goto end;
 		}
 
-		char buffer[1024];
-		while (TRUE)
-		{
-			int bytes_read = read(fd, buffer, sizeof(buffer));
-			if (bytes_read == -1) {
-				ERROR("Error, read failed");
-			}
-			if (bytes_read == 0) {
-				//EOF reached
-				break;
-			} else {
-				assert(bytes_read > 0);
-				int bytes_written = fwrite(buffer, 1, bytes_read, stdout);
-				if (bytes_written != bytes_read) {
-					fprintf(stderr, "Error, writing to stdout failed (%d / %d)\n", bytes_written, bytes_read);
-					goto end;
-				}
-			}
+		if (!read_file(fd)) {
+			goto end;
 		}
 	}
 
@@ -127,4 +112,35 @@ int open_fifo(const char* file_path)
 
 end:
 	return fd;
+}
+
+bool read_file(int fd)
+{
+	bool success = FALSE;
+
+	char buffer[1024];
+	while (TRUE)
+	{
+		int bytes_read = read(fd, buffer, sizeof(buffer));
+		if (bytes_read == -1) {
+			ERROR("Error, read failed");
+		}
+		if (bytes_read == 0) {
+			//EOF reached
+			break;
+		} else {
+			assert(bytes_read > 0);
+			int bytes_written = fwrite(buffer, 1, bytes_read, stdout);
+			//TODO: shoudl this be an error?
+			if (bytes_written != bytes_read) {
+				fprintf(stderr, "Error, writing to stdout failed (%d / %d)\n", bytes_written, bytes_read);
+				goto end;
+			}
+		}
+	}
+
+	success = TRUE;
+
+end:
+	return success;
 }
