@@ -34,7 +34,9 @@ int fd = -1;
 // Function Declarations
 //
 
-void signal_handler(int signum);
+bool register_signal_handlers();
+void kill_signal_handler(int signum);
+void pipe_signal_handler(int signum);
 int open_fifo(const char* file_path);
 bool write_file(int fd);
 
@@ -50,21 +52,10 @@ int main(int argc, char** argv)
 		printf("Usage: ./writer_pipe <path>\n");
 		goto end;
 	}
-
 	file_path = argv[1];
 
-	// Register signal handler
-	struct sigaction action;
-	action.sa_handler = signal_handler;
-	if (sigemptyset(&action.sa_mask) == -1) {
-		ERROR("Error calling sigemptyset");
-	}
-	action.sa_flags = 0;
-	if (sigaction(SIGINT, &action, NULL) == -1) {
-		ERROR("Error, sigaction failed");
-	}
-	if (sigaction(SIGTERM, &action, NULL) == -1) {
-		ERROR("Error, sigaction failed");
+	if (!register_signal_handlers()) {
+		goto end;
 	}
 
 	fd = open_fifo(file_path);
@@ -87,14 +78,60 @@ end:
 	return exit_status;
 }
 
-void signal_handler(int signum)
+bool register_signal_handlers()
+{
+	bool success = FALSE;
+
+	struct sigaction kill_action;
+	kill_action.sa_handler = kill_signal_handler;
+	if (sigemptyset(&kill_action.sa_mask) == -1) {
+		ERROR("Error calling sigemptyset");
+	}
+	kill_action.sa_flags = 0;
+
+	struct sigaction pipe_action;
+	pipe_action.sa_handler = pipe_signal_handler;
+	if (sigemptyset(&pipe_action.sa_mask) == -1) {
+		ERROR("Error calling sigemptyset");
+	}
+	if (sigaddset(&pipe_action.sa_mask, SIGINT) == -1) {
+		ERROR("Error calling sigaddset");
+	}
+	if (sigaddset(&pipe_action.sa_mask, SIGTERM) == -1) {
+		ERROR("Error calling sigaddset");
+	}
+	pipe_action.sa_flags = 0;
+
+	if (sigaction(SIGINT, &kill_action, NULL) == -1) {
+		ERROR("Error, sigaction failed");
+	}
+	if (sigaction(SIGTERM, &kill_action, NULL) == -1) {
+		ERROR("Error, sigaction failed");
+	}
+	if (sigaction(SIGPIPE, &pipe_action, NULL) == -1) {
+		ERROR("Error, sigaction failed");
+	}
+
+	success = TRUE;
+
+end:
+	return success;
+}
+
+void kill_signal_handler(int signum)
 {
 	unlink(file_path);
 	if (fd != -1) {
 		close(fd);
 	}
-	//TODO: call origial signal handler instread?
+	//TODO: call original signal handler instead?
 	exit(EXIT_FAILURE);
+}
+
+void pipe_signal_handler(int signum)
+{
+	close(fd);
+	fd = -1;
 }
 
 int open_fifo(const char* file_path)
@@ -154,7 +191,15 @@ bool write_file(int fd)
 		int len = strlen(line);
 		//TODO: should we fail if written bytes != len ?
 		if (write(fd, line, len) == -1) {
-			ERROR("Error, write failed");
+			int reason = errno;
+			perror("Error, write failed");
+			if (reason == EPIPE) {
+				fd = open_fifo(file_path);
+				//TODO: should we retry writing the same line, or skip to the next?
+				continue;
+			} else {
+				goto end;
+			}
 		}
 	}
 
