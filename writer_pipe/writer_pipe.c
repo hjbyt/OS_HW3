@@ -8,11 +8,30 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+//
+//
+//
+
+#define TRUE 1
+#define FALSE 0
+typedef int bool;
+
 #define ERROR(...) \
 	do { \
 		perror(__VA_ARGS__); \
 		goto end; \
 	} while (0)
+
+//
+// Function Declarations
+//
+
+int open_fifo(const char* file_path);
+bool write_file(int fd);
+
+//
+// Implementation
+//
 
 int main(int argc, char** argv)
 {
@@ -26,6 +45,31 @@ int main(int argc, char** argv)
 
 	const char* file_path = argv[1];
 
+
+
+	fd = open_fifo(file_path);
+	if (fd == -1) {
+		goto end;
+	}
+
+	if (!write_file(fd)) {
+		goto end;
+	}
+
+	exit_status = EXIT_SUCCESS;
+
+end:
+	if (fd != -1) {
+		unlink(file_path);
+		close(fd);
+	}
+
+	return exit_status;
+}
+
+int open_fifo(const char* file_path)
+{
+	int fd = -1;
 	struct stat stat_buf;
 	if (stat(file_path, &stat_buf) == -1) {
 		if (errno == ENOENT) {
@@ -53,11 +97,25 @@ int main(int argc, char** argv)
 
 	//TODO: should this really be done?
 	if (fstat(fd, &stat_buf) == -1) {
+		int _errno = errno;
+		close(fd);
+		errno = _errno;
 		ERROR("Error, stat failed");
 	}
 	if (!S_ISFIFO(stat_buf.st_mode)) {
+		int _errno = errno;
+		close(fd);
+		errno = _errno;
 		ERROR("Error, opened file is not a pipe");
 	}
+
+end:
+	return fd;
+}
+
+bool write_file(int fd)
+{
+	bool success = FALSE;
 
 	//TODO: is this line size ok?
 	char line[1024];
@@ -70,13 +128,8 @@ int main(int argc, char** argv)
 		}
 	}
 
-	exit_status = EXIT_SUCCESS;
+	success = TRUE;
 
 end:
-	if (fd != -1) {
-		unlink(file_path);
-		close(fd);
-	}
-
-	return exit_status;
+	return success;
 }
