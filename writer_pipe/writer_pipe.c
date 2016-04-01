@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <signal.h>
 
 //
 //
@@ -23,9 +24,17 @@ typedef int bool;
 	} while (0)
 
 //
+// Globals
+//
+
+const char* file_path;
+int fd = -1;
+
+//
 // Function Declarations
 //
 
+void signal_handler(int signum);
 int open_fifo(const char* file_path);
 bool write_file(int fd);
 
@@ -36,14 +45,27 @@ bool write_file(int fd);
 int main(int argc, char** argv)
 {
 	int exit_status = EXIT_FAILURE;
-	int fd = -1;
 
 	if (argc != 2) {
 		printf("Usage: ./writer_pipe <path>\n");
 		goto end;
 	}
 
-	const char* file_path = argv[1];
+	file_path = argv[1];
+
+	// Register signal handler
+	struct sigaction action;
+	action.sa_handler = signal_handler;
+	if (sigemptyset(&action.sa_mask) == -1) {
+		ERROR("Error calling sigemptyset");
+	}
+	action.sa_flags = 0;
+	if (sigaction(SIGINT, &action, NULL) == -1) {
+		ERROR("Error, sigaction failed");
+	}
+	if (sigaction(SIGTERM, &action, NULL) == -1) {
+		ERROR("Error, sigaction failed");
+	}
 
 	fd = open_fifo(file_path);
 	if (fd == -1) {
@@ -57,12 +79,22 @@ int main(int argc, char** argv)
 	exit_status = EXIT_SUCCESS;
 
 end:
+	unlink(file_path);
 	if (fd != -1) {
-		unlink(file_path);
 		close(fd);
 	}
 
 	return exit_status;
+}
+
+void signal_handler(int signum)
+{
+	unlink(file_path);
+	if (fd != -1) {
+		close(fd);
+	}
+	//TODO: call origial signal handler instread?
+	exit(EXIT_FAILURE);
 }
 
 int open_fifo(const char* file_path)
