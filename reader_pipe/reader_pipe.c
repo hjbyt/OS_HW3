@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <signal.h>
 
 //
 //
@@ -23,10 +24,19 @@ typedef int bool;
 	} while (FALSE)
 
 //
+// Globals
+//
+
+struct sigaction int_sig_handler;
+struct sigaction term_sig_handler;
+
+//
 // Function Declarations
 //
 
 int open_fifo(const char* file_path);
+bool ignore_kill_signals();
+bool restore_signal_handlers();
 bool read_file(int fd);
 
 //
@@ -52,7 +62,15 @@ int main(int argc, char** argv)
 			goto end;
 		}
 
+		if (!ignore_kill_signals()) {
+			goto end;
+		}
+
 		if (!read_file(fd)) {
+			goto end;
+		}
+
+		if (!restore_signal_handlers()) {
 			goto end;
 		}
 	}
@@ -112,6 +130,47 @@ int open_fifo(const char* file_path)
 
 end:
 	return fd;
+}
+
+bool ignore_kill_signals()
+{
+	bool success = FALSE;
+
+	struct sigaction kill_action;
+	kill_action.sa_handler = SIG_IGN;
+	if (sigemptyset(&kill_action.sa_mask) == -1) {
+		ERROR("Error calling sigemptyset");
+	}
+	kill_action.sa_flags = 0;
+
+	if (sigaction(SIGINT, &kill_action, &int_sig_handler) == -1) {
+		ERROR("Error, sigaction failed");
+	}
+	if (sigaction(SIGTERM, &kill_action, &term_sig_handler) == -1) {
+		ERROR("Error, sigaction failed");
+	}
+
+	success = TRUE;
+
+end:
+	return success;
+}
+
+bool restore_signal_handlers()
+{
+	bool success = FALSE;
+
+	if (sigaction(SIGINT, &int_sig_handler, NULL) == -1) {
+		ERROR("Error, sigaction failed");
+	}
+	if (sigaction(SIGTERM, &term_sig_handler, NULL) == -1) {
+		ERROR("Error, sigaction failed");
+	}
+
+	success = TRUE;
+
+end:
+	return success;
 }
 
 bool read_file(int fd)
