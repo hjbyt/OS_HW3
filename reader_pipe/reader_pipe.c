@@ -8,12 +8,29 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-//#define ERROR(...) error(EXIT_FAILURE, errno, __VA_ARGS__)
+//
+//
+//
+
+#define TRUE 1
+#define FALSE 0
+typedef int bool;
+
 #define ERROR(...) \
 	do { \
 		perror(__VA_ARGS__); \
 		goto end; \
-	} while (0)
+	} while (FALSE)
+
+//
+// Function Declarations
+//
+
+int open_fifo(const char* file_path);
+
+//
+// Implementation
+//
 
 int main(int argc, char** argv)
 {
@@ -21,52 +38,37 @@ int main(int argc, char** argv)
 	int fd = -1;
 
 	if (argc != 2) {
-		printf("Usage: ./reader_pipe <path>");
+		printf("Usage: ./reader_pipe <path>\n");
 		goto end;
 	}
 
-	const char* pipe_path = argv[1];
+	const char* file_path = argv[1];
 
-	struct stat stat_buf;
-	if (stat(pipe_path, &stat_buf) == -1) {
-		if (errno == ENOENT) {
-			if (mkfifo(pipe_path, 0777) == -1) {
-				ERROR("Error, mkfifo failed");
-			}
-		} else {
-			ERROR("Error, stat on pipe file failed");
-		}
-	} else {
-		if (!S_ISFIFO(stat_buf.st_mode)) {
-			if (unlink(pipe_path) != 0) {
-				ERROR("Error, unlink failed");
-			}
-			if (mkfifo(pipe_path, 0777) == -1) {
-				ERROR("Error, mkfifo failed");
-			}
-		}
-	}
-
-	fd = open(pipe_path, O_WRONLY);
-	if (fd == -1) {
-		ERROR("Error, open pipe failed");
-	}
-
-	//TODO: should this really be done?
-	if (fstat(fd, &stat_buf) == -1) {
-		ERROR("Error, stat on pipe file failed");
-	}
-	if (!S_ISFIFO(stat_buf.st_mode)) {
-		ERROR("Error, opened file is not a pipe");
-	}
-
-	//TODO: is this line size ok?
-	char line[1024];
-	while (fgets(line, sizeof(line), stdin) != NULL)
+	while (TRUE)
 	{
-		int len = strlen(line);
-		if (write(fd, line, len) != len) {
-			ERROR("Error, write failed");
+		fd = open_fifo(file_path);
+		if (fd == -1) {
+			goto end;
+		}
+
+		char buffer[1024];
+		while (TRUE)
+		{
+			int bytes_read = read(fd, buffer, sizeof(buffer));
+			if (bytes_read == -1) {
+				ERROR("Error, read failed");
+			}
+			if (bytes_read == 0) {
+				//EOF reached
+				break;
+			} else {
+				assert(bytes_read > 0);
+				int bytes_written = fwrite(buffer, 1, bytes_read, stdout);
+				if (bytes_written != bytes_read) {
+					fprintf(stderr, "Error, writing to stdout failed (%d / %d)\n", bytes_written, bytes_read);
+					goto end;
+				}
+			}
 		}
 	}
 
@@ -74,9 +76,55 @@ int main(int argc, char** argv)
 
 end:
 	if (fd != -1) {
-		unlink(pipe_path);
 		close(fd);
 	}
 
 	return exit_status;
+}
+
+int open_fifo(const char* file_path)
+{
+	int fd = -1;
+
+	// Poll until fifo file exists
+	struct stat stat_buf;
+	while (TRUE)
+	{
+		if (stat(file_path, &stat_buf) == -1) {
+			if (errno == ENOENT) {
+				sleep(1);
+				continue;
+			} else {
+				ERROR("Error, stat failed");
+			}
+		} else {
+			if (S_ISFIFO(stat_buf.st_mode)) {
+				break;
+			} else {
+				printf("Error, input file is not a pipe.\n");
+				goto end;
+			}
+		}
+	}
+
+	fd = open(file_path, O_RDONLY);
+	if (fd == -1) {
+		ERROR("Error opening input file");
+	}
+
+	if (fstat(fd, &stat_buf) == -1) {
+		close(fd);
+		fd = -1;
+		perror("Error, stat failed");
+		goto end;
+	}
+	if (!S_ISFIFO(stat_buf.st_mode)) {
+		close(fd);
+		fd = -1;
+		perror("Error, opened file is not a pipe");
+		goto end;
+	}
+
+end:
+	return fd;
 }

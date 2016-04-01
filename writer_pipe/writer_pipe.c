@@ -8,7 +8,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-//#define ERROR(...) error(EXIT_FAILURE, errno, __VA_ARGS__)
 #define ERROR(...) \
 	do { \
 		perror(__VA_ARGS__); \
@@ -21,40 +20,40 @@ int main(int argc, char** argv)
 	int fd = -1;
 
 	if (argc != 2) {
-		printf("Usage: ./writer_pipe <pipe path>");
+		printf("Usage: ./writer_pipe <path>\n");
 		goto end;
 	}
 
-	const char* pipe_path = argv[1];
+	const char* file_path = argv[1];
 
 	struct stat stat_buf;
-	if (stat(pipe_path, &stat_buf) == -1) {
+	if (stat(file_path, &stat_buf) == -1) {
 		if (errno == ENOENT) {
-			if (mkfifo(pipe_path, 0777) == -1) {
+			if (mkfifo(file_path, 0777) == -1) {
 				ERROR("Error, mkfifo failed");
 			}
 		} else {
-			ERROR("Error, stat on pipe file failed");
+			ERROR("Error, stat failed");
 		}
 	} else {
 		if (!S_ISFIFO(stat_buf.st_mode)) {
-			if (unlink(pipe_path) != 0) {
+			if (unlink(file_path) != 0) {
 				ERROR("Error, unlink failed");
 			}
-			if (mkfifo(pipe_path, 0777) == -1) {
+			if (mkfifo(file_path, 0777) == -1) {
 				ERROR("Error, mkfifo failed");
 			}
 		}
 	}
 
-	fd = open(pipe_path, O_WRONLY);
+	fd = open(file_path, O_WRONLY);
 	if (fd == -1) {
 		ERROR("Error, open pipe failed");
 	}
 
 	//TODO: should this really be done?
 	if (fstat(fd, &stat_buf) == -1) {
-		ERROR("Error, stat on pipe file failed");
+		ERROR("Error, stat failed");
 	}
 	if (!S_ISFIFO(stat_buf.st_mode)) {
 		ERROR("Error, opened file is not a pipe");
@@ -65,7 +64,8 @@ int main(int argc, char** argv)
 	while (fgets(line, sizeof(line), stdin) != NULL)
 	{
 		int len = strlen(line);
-		if (write(fd, line, len) != len) {
+		//TODO: should we fail if written bytes != len ?
+		if (write(fd, line, len) == -1) {
 			ERROR("Error, write failed");
 		}
 	}
@@ -74,7 +74,7 @@ int main(int argc, char** argv)
 
 end:
 	if (fd != -1) {
-		unlink(pipe_path);
+		unlink(file_path);
 		close(fd);
 	}
 
