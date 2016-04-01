@@ -45,8 +45,6 @@ int main(int argc, char** argv)
 
 	const char* file_path = argv[1];
 
-
-
 	fd = open_fifo(file_path);
 	if (fd == -1) {
 		goto end;
