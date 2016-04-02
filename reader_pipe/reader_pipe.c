@@ -184,7 +184,7 @@ bool read_file(int fd)
 {
 	bool success = FALSE;
 
-	char buffer[1024];
+	static char buffer[1024*1024];
 	while (TRUE)
 	{
 		int bytes_read = read(fd, buffer, sizeof(buffer));
@@ -197,12 +197,17 @@ bool read_file(int fd)
 		} else {
 			assert(bytes_read > 0);
 			int bytes_written = fwrite(buffer, 1, bytes_read, stdout);
-			//TODO: shoudl this be an error?
+			//TODO: should this be an error?
 			if (bytes_written != bytes_read) {
 				fprintf(stderr, "Error, writing to stdout failed (%d / %d)\n", bytes_written, bytes_read);
 				goto end;
 			}
 		}
+	}
+	//NOTE: if stdout isn't flushed and a SIGINT is received later,
+	// the data might not be actually written.
+	if (fflush(stdout) != 0) {
+		ERROR("Error, flush stdout failed");
 	}
 
 	success = TRUE;

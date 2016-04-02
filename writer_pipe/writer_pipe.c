@@ -184,13 +184,12 @@ bool write_file(int fd)
 {
 	bool success = FALSE;
 
-	//TODO: is this line size ok?
-	char line[1024];
-	while (fgets(line, sizeof(line), stdin) != NULL)
+	static char buffer[1024*1024];
+	while (fgets(buffer, sizeof(buffer), stdin) != NULL)
 	{
-		int len = strlen(line);
-		//TODO: should we fail if written bytes != len ?
-		if (write(fd, line, len) == -1) {
+		int len = strlen(buffer);
+		int bytes_written = write(fd, buffer, len);
+		if (bytes_written == -1) {
 			int reason = errno;
 			perror("Error, write failed");
 			if (reason == EPIPE) {
@@ -202,6 +201,10 @@ bool write_file(int fd)
 			} else {
 				goto end;
 			}
+		} else if (bytes_written != len) {
+			//TODO: should we fail if written bytes != len ?
+			//TODO: is ERROR (using errno) okay?
+			ERROR("Error, write partialy failed");
 		}
 	}
 
