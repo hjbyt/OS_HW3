@@ -125,14 +125,16 @@ int open_fifo(const char* file_path)
 	// (the original fifo might have been deleted
 	// and a regular file created between stat and open)
 	if (fstat(fd, &stat_buf) == -1) {
+		perror("Error, stat failed");
 		close(fd);
 		fd = -1;
-		ERROR("Error, stat failed");
+		goto end;
 	}
 	if (!S_ISFIFO(stat_buf.st_mode)) {
+		perror("Error, opened file is not a pipe");
 		close(fd);
 		fd = -1;
-		ERROR("Error, opened file is not a pipe");
+		goto end;
 	}
 
 end:
