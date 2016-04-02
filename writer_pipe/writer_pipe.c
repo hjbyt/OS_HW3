@@ -195,7 +195,9 @@ bool write_file(int fd)
 			perror("Error, write failed");
 			if (reason == EPIPE) {
 				fd = open_fifo(file_path);
-				//TODO: should we retry writing the same line, or skip to the next?
+				if (fd == -1) {
+					ERROR("Error, open pipe failed");
+				}
 				continue;
 			} else {
 				goto end;
