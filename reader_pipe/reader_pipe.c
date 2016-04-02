@@ -102,6 +102,17 @@ int open_fifo(const char* file_path)
 			}
 		} else {
 			if (S_ISFIFO(stat_buf.st_mode)) {
+				// Try open fifo file
+				fd = open(file_path, O_RDONLY);
+				if (fd == -1) {
+					// If it was deleted (between stat and open)
+					if (errno == ENOENT) {
+						// Retry
+						continue;
+					} else {
+						ERROR("Error opening input file");
+					}
+				}
 				break;
 			} else {
 				printf("Error, input file is not a pipe.\n");
@@ -110,22 +121,18 @@ int open_fifo(const char* file_path)
 		}
 	}
 
-	fd = open(file_path, O_RDONLY);
-	if (fd == -1) {
-		ERROR("Error opening input file");
-	}
-
+	// Make sure the file opened is fifo
+	// (the original fifo might have been deleted
+	// and a regular file created between stat and open)
 	if (fstat(fd, &stat_buf) == -1) {
 		close(fd);
 		fd = -1;
-		perror("Error, stat failed");
-		goto end;
+		ERROR("Error, stat failed");
 	}
 	if (!S_ISFIFO(stat_buf.st_mode)) {
 		close(fd);
 		fd = -1;
-		perror("Error, opened file is not a pipe");
-		goto end;
+		ERROR("Error, opened file is not a pipe");
 	}
 
 end:
