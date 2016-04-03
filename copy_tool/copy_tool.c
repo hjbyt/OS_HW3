@@ -71,11 +71,13 @@ int main(int argc, char** argv)
 	}
 
 	//TODO: should we map the whole file, even if it's very large?
+	//TODO: add MAP_POPULATE?
 	source = (char*)mmap(NULL, length, PROT_READ, MAP_SHARED, source_fd, 0);
 	if (source == MAP_FAILED) {
 		ERROR("Error, mmap source failed");
 	}
 
+	//TODO: add MAP_POPULATE?
 	dest = (char*)mmap(NULL, length, PROT_WRITE, MAP_SHARED, dest_fd, 0);
 	if (source == MAP_FAILED) {
 		ERROR("Error, mmap dest failed");
