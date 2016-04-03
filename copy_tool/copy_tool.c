@@ -24,6 +24,16 @@ typedef int bool;
 		goto end; \
 	} while (FALSE)
 
+#define MAX_CHUNK_SIZE (1024*1024)
+
+//
+// Declarations
+//
+
+bool do_copy(int source_fd, int dest_fd, size_t length);
+bool copy_chunk(int source_fd, int dest_fd, size_t offset, size_t size);
+void copy_memory(void* dest, void* src, size_t size);
+
 //
 // Implementation
 //
@@ -33,9 +43,6 @@ int main(int argc, char** argv)
 	int exit_status = EXIT_FAILURE;
 	int source_fd = -1;
 	int dest_fd = -1;
-	char* source = MAP_FAILED;
-	char* dest = MAP_FAILED;
-	size_t length = 0;
 
 	if (argc != 3) {
 		printf("Usage: ./copy_tool <source_path> <dest_path>\n");
@@ -53,7 +60,6 @@ int main(int argc, char** argv)
 			ERROR("Error, stat source failed");
 		}
 	}
-	length = stat_buf.st_size;
 
 	source_fd = open(source_path, O_RDONLY);
 	if (source_fd == -1) {
@@ -66,38 +72,17 @@ int main(int argc, char** argv)
 		ERROR("Error, open destination file failed");
 	}
 
-	if (ftruncate(dest_fd, length) == -1) {
+	if (ftruncate(dest_fd, stat_buf.st_size) == -1) {
 		ERROR("Error, truncating destination file failed");
 	}
 
-	//TODO: should we map the whole file, even if it's very large?
-	//TODO: add MAP_POPULATE?
-	source = (char*)mmap(NULL, length, PROT_READ, MAP_SHARED, source_fd, 0);
-	if (source == MAP_FAILED) {
-		ERROR("Error, mmap source failed");
+	if (!do_copy(source_fd, dest_fd, stat_buf.st_size)) {
+		goto end;
 	}
-
-	//TODO: add MAP_POPULATE?
-	dest = (char*)mmap(NULL, length, PROT_WRITE, MAP_SHARED, dest_fd, 0);
-	if (source == MAP_FAILED) {
-		ERROR("Error, mmap dest failed");
-	}
-
-	memcpy(dest, source, length);
 
 	exit_status = EXIT_SUCCESS;
 
 end:
-	if (dest != MAP_FAILED) {
-		if(munmap(dest, length) == -1) {
-			perror("Error, unmapping destination file memory failed");
-		}
-	}
-	if (source != MAP_FAILED) {
-		if(munmap(source, length) == -1) {
-			perror("Error, unmapping source file memory failed");
-		}
-	}
 	if (dest_fd != -1) {
 		close(dest_fd);
 	}
@@ -106,4 +91,82 @@ end:
 	}
 
 	return exit_status;
+}
+
+bool do_copy(int source_fd, int dest_fd, size_t length)
+{
+	bool success = FALSE;
+
+	size_t offset = 0;
+	while (length > 0)
+	{
+		size_t chunk_size = MAX_CHUNK_SIZE < length ? MAX_CHUNK_SIZE : length;
+		if (!copy_chunk(source_fd, dest_fd, offset, chunk_size)) {
+			goto end;
+		}
+		offset += chunk_size;
+		length -= chunk_size;
+	}
+
+	success = TRUE;
+
+end:
+	return success;
+}
+
+bool copy_chunk(int source_fd, int dest_fd, size_t offset, size_t size)
+{
+	bool success = FALSE;
+	void* source = MAP_FAILED;
+	void* dest = MAP_FAILED;
+
+	source = mmap(NULL, size, PROT_READ, MAP_SHARED, source_fd, offset);
+	if (source == MAP_FAILED) {
+		ERROR("Error, mmap source failed");
+	}
+
+	dest = mmap(NULL, size, PROT_WRITE, MAP_SHARED, dest_fd, offset);
+	if (source == MAP_FAILED) {
+		ERROR("Error, mmap dest failed");
+	}
+
+	copy_memory(dest, source, size);
+
+	success = TRUE;
+
+end:
+	if (dest != MAP_FAILED) {
+		if(munmap(dest, size) == -1) {
+			perror("Error, unmapping destination file memory failed");
+		}
+	}
+	if (source != MAP_FAILED) {
+		if(munmap(source, size) == -1) {
+			perror("Error, unmapping source file memory failed");
+		}
+	}
+	return success;
+}
+
+//Note: the TA has forbidden using memcpy.
+void copy_memory(void* dest, void* src, size_t size)
+{
+	//Note: the pointers should already be aligned to PAGE_SIZE (and therefore long aligned)
+	long* src_ = (long*)src;
+	long* dest_ = (long*)dest;
+	size_t size_ = size - (size % sizeof(long));
+	size_t long_chunks = size_ / sizeof(long);
+
+	for (size_t i = 0; i < long_chunks; ++i)
+	{
+		dest_[i] = src_[i];
+	}
+
+	// copy remainder
+	char* src__ = (char*)src;
+	char* dest__ = (char*)dest;
+	for (size_t i  = size_; i < size; ++i)
+	{
+		dest__[i] = src__[i];
+	}
 }
