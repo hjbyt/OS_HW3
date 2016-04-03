@@ -200,6 +200,7 @@ bool read_file(int fd)
 			assert(bytes_read > 0);
 			//Note: I use fwrite instead of the recommended printf, because it makes more sense IMO.
 			//  I assume it's allowed, as it's basically almost the same API call.
+			// Alternatively write(STDOUT_FILENO, buffer, bytes_read) could be used here.
 			int bytes_written = fwrite(buffer, 1, bytes_read, stdout);
 			if (bytes_written != bytes_read) {
 				fprintf(stderr, "Error, writing to stdout failed (%d / %d)\n", bytes_written, bytes_read);
@@ -212,6 +213,7 @@ bool read_file(int fd)
 	// if stdout isn't flushed and a SIGINT is received later, the data might not be actually written.
 	//Note: I suppress errors here because the exercise description didn't really
 	// ask to flush the writes.
+	//Note: fsync(STDOUT_FILENO) could be used here instead.
 	fflush(stdout);
 
 	success = TRUE;
