@@ -124,8 +124,6 @@ void kill_signal_handler(int signum)
 	if (fd != -1) {
 		close(fd);
 	}
-	//TODO: call original signal handler instead?
-	exit(EXIT_FAILURE);
 }
 
 void pipe_signal_handler(int signum)
