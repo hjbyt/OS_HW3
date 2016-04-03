@@ -198,19 +198,21 @@ bool read_file(int fd)
 			break;
 		} else {
 			assert(bytes_read > 0);
+			//Note: I use fwrite instead of the recommended printf, because it makes more sense IMO.
+			//  I assume it's allowed, as it's basically almost the same API call.
 			int bytes_written = fwrite(buffer, 1, bytes_read, stdout);
-			//TODO: should this be an error?
 			if (bytes_written != bytes_read) {
 				fprintf(stderr, "Error, writing to stdout failed (%d / %d)\n", bytes_written, bytes_read);
 				goto end;
 			}
 		}
 	}
-	//NOTE: if stdout isn't flushed and a SIGINT is received later,
-	// the data might not be actually written.
-	if (fflush(stdout) != 0) {
-		ERROR("Error, flush stdout failed");
-	}
+	//Note: normally when stdout is directed to a console, it's automatically flushed after every line.
+	// but when it's directed to a file, it won't necessarily get flushed.
+	// if stdout isn't flushed and a SIGINT is received later, the data might not be actually written.
+	//Note: I suppress errors here because the exercise description didn't really
+	// ask to flush the writes.
+	fflush(stdout);
 
 	success = TRUE;
 

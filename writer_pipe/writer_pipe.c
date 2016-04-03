@@ -204,9 +204,7 @@ bool write_file(int fd)
 				goto end;
 			}
 		} else if (bytes_written != len) {
-			//TODO: should we fail if written bytes != len ?
-			//TODO: is ERROR (using errno) okay?
-			ERROR("Error, write partialy failed");
+			fprintf(stderr, "Error, write partially failed (%d / %d)", bytes_written, len);
 		}
 	}
 
