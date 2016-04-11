@@ -17,14 +17,13 @@
 #define TRUE 1
 typedef int bool;
 
+#define MEGA (1024*1024)
 
 #define ERROR(...) \
 	do { \
 		perror(__VA_ARGS__); \
 		goto end; \
 	} while (FALSE)
-
-#define MAX_CHUNK_SIZE (1024*1024)
 
 //
 // Declarations
@@ -97,10 +96,16 @@ bool do_copy(int source_fd, int dest_fd, size_t length)
 {
 	bool success = FALSE;
 
+	long page_size = sysconf(_SC_PAGE_SIZE);
+	if (page_size == -1) {
+		ERROR("Error querying for page size");
+	}
+	size_t max_chunk_size = page_size > MEGA ? page_size : MEGA;
+
 	size_t offset = 0;
 	while (length > 0)
 	{
-		size_t chunk_size = MAX_CHUNK_SIZE < length ? MAX_CHUNK_SIZE : length;
+		size_t chunk_size = max_chunk_size < length ? max_chunk_size : length;
 		if (!copy_chunk(source_fd, dest_fd, offset, chunk_size)) {
 			goto end;
 		}
