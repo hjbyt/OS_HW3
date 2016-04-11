@@ -95,6 +95,7 @@ int open_fifo(const char* file_path)
 	{
 		if (stat(file_path, &stat_buf) == -1) {
 			if (errno == ENOENT) {
+				//Note: no point checking return value of sleep.
 				sleep(1);
 				continue;
 			} else {

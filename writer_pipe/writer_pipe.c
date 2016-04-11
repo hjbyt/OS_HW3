@@ -29,6 +29,7 @@ typedef int bool;
 
 const char* file_path;
 int fd = -1;
+bool fifo_file_exists = FALSE;
 
 //
 // Function Declarations
@@ -37,7 +38,10 @@ int fd = -1;
 bool register_signal_handlers();
 void kill_signal_handler(int signum);
 void pipe_signal_handler(int signum);
-int open_fifo(const char* file_path);
+bool create_fifo();
+bool open_fifo();
+void delete_fifo_and_close();
+void close_fifo();
 bool write_file(int fd);
 
 //
@@ -58,8 +62,11 @@ int main(int argc, char** argv)
 		goto end;
 	}
 
-	fd = open_fifo(file_path);
-	if (fd == -1) {
+	if (!create_fifo()) {
+		goto end;
+	}
+
+	if (!open_fifo()) {
 		goto end;
 	}
 
@@ -70,10 +77,7 @@ int main(int argc, char** argv)
 	exit_status = EXIT_SUCCESS;
 
 end:
-	unlink(file_path);
-	if (fd != -1) {
-		close(fd);
-	}
+	delete_fifo_and_close();
 
 	return exit_status;
 }
@@ -120,21 +124,19 @@ end:
 
 void kill_signal_handler(int signum)
 {
-	unlink(file_path);
-	if (fd != -1) {
-		close(fd);
-	}
+	delete_fifo_and_close();
+	exit(EXIT_SUCCESS);
 }
 
 void pipe_signal_handler(int signum)
 {
-	close(fd);
-	fd = -1;
+	close_fifo();
 }
 
-int open_fifo(const char* file_path)
+bool create_fifo()
 {
-	int fd = -1;
+	bool success = FALSE;
+
 	struct stat stat_buf;
 	if (stat(file_path, &stat_buf) == -1) {
 		if (errno == ENOENT) {
@@ -155,6 +157,18 @@ int open_fifo(const char* file_path)
 		}
 	}
 
+	fifo_file_exists = TRUE;
+	success = TRUE;
+
+end:
+	return success;
+}
+
+bool open_fifo()
+{
+	bool success = FALSE;
+
+	assert(fd == -1);
 	fd = open(file_path, O_WRONLY);
 	if (fd == -1) {
 		ERROR("Error, open pipe failed");
@@ -163,21 +177,41 @@ int open_fifo(const char* file_path)
 	// Make sure the file opened is fifo
 	// (the original fifo might have been deleted
 	// and a regular file created between stat and open)
+	struct stat stat_buf;
 	if (fstat(fd, &stat_buf) == -1) {
 		perror("Error, stat failed");
-		close(fd);
-		fd = -1;
+		delete_fifo_and_close();
 		goto end;
 	}
 	if (!S_ISFIFO(stat_buf.st_mode)) {
 		perror("Error, opened file is not a pipe");
-		close(fd);
-		fd = -1;
+		delete_fifo_and_close();
 		goto end;
 	}
 
+	success = TRUE;
+
 end:
-	return fd;
+	return success;
+}
+
+void delete_fifo_and_close()
+{
+	if (fifo_file_exists) {
+		if (unlink(file_path) == -1) {
+			perror("Error, unlink failed");
+		}
+		fifo_file_exists = FALSE;
+	}
+	close_fifo();
+}
+
+void close_fifo()
+{
+	if (fd != -1) {
+		close(fd);
+		fd = -1;
+	}
 }
 
 bool write_file(int fd)
@@ -193,8 +227,7 @@ bool write_file(int fd)
 			int reason = errno;
 			perror("Error, write failed");
 			if (reason == EPIPE) {
-				fd = open_fifo(file_path);
-				if (fd == -1) {
+				if (!open_fifo()) {
 					ERROR("Error, open pipe failed");
 				}
 				continue;
@@ -203,6 +236,7 @@ bool write_file(int fd)
 			}
 		} else if (bytes_written != len) {
 			fprintf(stderr, "Error, write partially failed (%d / %d)", bytes_written, len);
+			goto end;
 		}
 	}
 
